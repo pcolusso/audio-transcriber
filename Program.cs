@@ -36,6 +36,7 @@ Console.WriteLine("Confiugration complete.");
 foreach (var filePath in Directory.EnumerateFiles(srcDir))
 {
     var fileName = Path.GetFileName(filePath).Trim();
+    // TODO: Skip not mp4
     if (!processed.HasBeenProcessed(fileName))
     {
         Console.WriteLine($"File {fileName} hasn't been processed, transcribing...");
