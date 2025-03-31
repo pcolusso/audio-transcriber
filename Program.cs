@@ -14,7 +14,10 @@ var srcDir = config["srcDir"] ?? Path.Combine(localPath, "src");
 var outDir = config["outDir"] ?? Path.Combine(localPath, "out");
 var logPath = config["logPath"] ?? Path.Combine(localPath, "log");
 var modelPath = config["modelPath"] ?? Path.Combine(localPath, "whisper-med-en-ggml.bin");
-var ffmpegPath = config["ffmpegPath"] ?? Path.Combine(localPath, "ffmpeg");
+var ffmpegPath = config["ffmpegDir"] ?? Path.Combine(localPath, "ffmpeg");
+
+Directory.CreateDirectory(outDir);
+Directory.CreateDirectory(ffmpegPath);
 
 Console.WriteLine($"Will read files in '{srcDir}', and place transcriptions in '{outDir}'.\nLoading whisper from '{modelPath}', ffmpeg from '{ffmpegPath}' and tracking in '{logPath}'");
 
@@ -40,9 +43,10 @@ foreach (var filePath in Directory.EnumerateFiles(srcDir))
     if (!processed.HasBeenProcessed(fileName))
     {
         Console.WriteLine($"File {fileName} hasn't been processed, transcribing...");
-        var outputPath = Path.Combine(outDir, fileName, ".txt");
+        var outputPath = Path.ChangeExtension(Path.Combine(outDir, fileName), ".txt");
         var outputFile = new StreamWriter(outputPath);
         var toProcess = await ConvertFile(filePath);
+        Console.WriteLine($"Created WAV in '{toProcess}'");
         using var fileStream = File.OpenRead(toProcess);
         using var processor = whisperFactory.CreateBuilder()
             .Build();
@@ -60,8 +64,26 @@ foreach (var filePath in Directory.EnumerateFiles(srcDir))
 async Task<string> ConvertFile(string inputPath)
 {
     var outPath = Path.ChangeExtension(inputPath, ".wav");
+    // Clear if already exists
     File.Delete(outPath);
-    await FFmpeg.Conversions.FromSnippet.Convert(inputPath, outPath);
+    /*
+    IMediaInfo info = await FFmpeg.GetMediaInfo(inputPath);
+    IAudioStream audioStream = info.AudioStreams.FirstOrDefault()!
+        .SetCodec(AudioCodec.pcm_s16le)
+        .SetSampleRate(16000);
+    var conversion = FFmpeg.Conversions.New()
+        .AddStream(audioStream)
+        .SetOutput(outPath);
+    */
+
+    var conversion = await FFmpeg.Conversions.FromSnippet.ExtractAudio(inputPath, outPath);
+    conversion.AddParameter("-ar 16000");
+    conversion.AddParameter("-acodec pcm_s16le");
+    var res = await conversion.Start();
+    if (!File.Exists(outPath))
+    {
+        throw new Exception("Conversion failed?");
+    }
     return outPath;
 }
 
